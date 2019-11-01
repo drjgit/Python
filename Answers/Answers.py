@@ -268,6 +268,7 @@ if '__main__'==__name__:
     tk = Tk()
     tk.title('自动答题系统')
     tk.geometry('240x200')
+    tk.resizable(width=False, height=False)
 
     # label如果设置大小，对齐方式将失效
     adm_label = Label(tk, text='Username：', compound='left')
@@ -277,7 +278,7 @@ if '__main__'==__name__:
 
     pwd_label = Label(tk, text='Password：', compound='left')
     pwd_label.place(x=70, y=80)
-    pwd_input = Entry(tk)
+    pwd_input = Entry(tk, show='*')
     pwd_input.place(x=70, y=110, width=100, height=25)
 
     if (cfg.get_username()!='' and cfg.get_password()!=''):
