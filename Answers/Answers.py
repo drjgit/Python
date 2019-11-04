@@ -5,6 +5,7 @@ import time
 import traceback
 import random
 import ConfigParser
+import threading
 from Tkinter import *
 from Logger import GetLog
 from selenium import webdriver
@@ -16,6 +17,8 @@ hdszgwslb = 'http://www.hdszgwslb.com/'
 lb_log_in = 'http://www.hdszgwslb.com/index/users/login'
 
 question_dict = {}
+exer = None
+anlv = 0
 
 def load_answer():
     with open('answers.txt') as f:
@@ -59,6 +62,9 @@ class ConfigManger():
 class ExerciseSystem:
     driver = None
     link = None
+    times = [1,1]
+    state = False
+    level = 0
 
     def __init__(self):
         # path = r'%s\chromedriver.exe'%(os.path.abspath('.'))
@@ -66,14 +72,14 @@ class ExerciseSystem:
         self.driver.maximize_window()
         self.driver.implicitly_wait(10)
 
-    def __del__(self):
-        self.quit()
-
-    def close(self):
+    def close_windows(self):
         self.driver.close()
 
-    def quit(self):
+    def quit_chrome(self):
         self.driver.quit()
+
+    def refresh_page(self):
+        self.driver.refresh()
 
     def windows_handles(self):
         return self.driver.window_handles
@@ -85,13 +91,6 @@ class ExerciseSystem:
     def open_windows(self,link):
         new_window = 'window.open("%s")'%(link)
         self.driver.execute_script(new_window)
-
-    def is_success(self):
-        str = self.driver.find_element_by_xpath('/body/div/div[@class="layui-layer-content"]').text
-        if (str.encode('utf-8') == '登录成功'.decode('utf-8')):
-            return False
-        else:
-            return True
 
     def open_link(self,link):
         self.driver.get(link)
@@ -112,14 +111,14 @@ class ExerciseSystem:
         self.driver.find_element_by_id('vercode').send_keys(pin)
 
     def answers(self):
-        self.click_wait(self.get_rand(6,13))
+        self.click_wait(self.get_rand())
         self.get_suject()
 
     def click_wait(self,value=1):
         time.sleep(value)
 
-    def get_rand(self,low,high):
-        return random.randint(low,high)
+    def get_rand(self):
+        return random.randint(self.times[0],self.times[1])
 
     def get_suject(self):
         subject = self.driver.find_element_by_xpath('//p[@id="title"]').text
@@ -175,7 +174,7 @@ class ExerciseSystem:
             return True
         return False
 
-    def get_level(self):
+    def get_levels(self):
         link_list = []
         ele_list = self.driver.find_elements_by_xpath('//ul[@class="list"]/li/a[@href]') 
         for ele in ele_list:
@@ -185,89 +184,196 @@ class ExerciseSystem:
     def default_option(self):
         answers = self.driver.find_elements_by_xpath('//input[@value]')
         answer = answers[0]
-        # str = answer.get_attribute('value').encode('utf-8')
         answer.click()
-        return [an.get_attribute('value').encode('utf-8') for an in answers]
+        ans = self.driver.find_elements_by_xpath('//label/span')
+        return [an.text.encode('utf-8') for an in ans]
+
+    def set_times(self,li):
+        if ((li[0]<2 or li[1]<2) and (li[0] > li[1])):
+            pass
+        else:
+            self.times = li
+    
+    def log_out(self):
+        if self.state :
+            self.state = False
+            return True
+        else:
+            return False
+    
+    def set_state(self,flage):
+        self.state = flage
+
+def do_title(file):
+    subject = exer.get_suject()
+    net_ans = exer.get_answer()
+    if question_dict.has_key(subject):
+        local_ans = question_dict[subject]
+        for i in range(len(net_ans)):
+            if net_ans[i].text in local_ans:
+                net_ans[i].click()
+                time.sleep(1)
+    else:
+        wor = exer.default_option()
+        wor_str = ';'.join([str for str in wor])
+        line = '%s#%s\n'%(subject.encode('utf-8'),wor_str)
+        file.write(line)
+        time.sleep(1)
+    exer.next_answer()
+
+def working(file,num):
+    egg_clock = 0
+    egg_flage = 0
+    err_clock = 0
+    while(True):
+        if exer.log_out():
+            # exer.quit_chrome()
+            # file.close()
+            raise Exception('退出答题！')
+        egg_clock += 1
+        try:
+            do_title(file)
+            err_clock = 0
+        except:
+            err_clock += 1
+            if (err_clock == 5):
+                exer.refresh_page()
+                egg_clock = 0
+            print('traceback.format_exc():\n%s'%(traceback.format_exc()))
+        time.sleep(exer.get_rand())
+        total = exer.get_progress()[1]
+        if (total == 0):
+            exer.next_level()
+            egg_clock = 0
+            egg_flage = 0
+            time.sleep(7)
+            if (num == 9):
+                return
+        if (egg_clock>=15 and egg_flage==0):
+            if (exer.easter_egg()):
+                continue
+            else:
+                egg_clock = 0
+                egg_flage = 1
 
 def auto_answer(config):
-    of = open('new_answer.txt','ab+')
     try:
-        exer = ExerciseSystem()
-        exer.open_link(lb_log_in)
-        while(True):
-            adm = adm_input.get()
-            pwd = pwd_input.get()
-            if (adm=='' or pwd==''):
-                mb.askokcancel('输入提示框','账号或密码输入错误')
-                continue
-            exer.enter_adm_pwd(adm,pwd)
-            vervode=dl.askstring('验证码提示框','请输入验证码')
-            exer.input_pin(vervode)
-            exer.log_in()
-            time.sleep(7)
-            if (exer.goto_computer()==False):
-                time.sleep(7)
-                break
-        
-        config.set_username(adm)
-        config.set_password(pwd)
-        config.Save()
+        of = open('new_answer.txt','ab+')
         exer.switch_windows()
-        lev_link = exer.get_level()
-        for link in lev_link:
+        lev_link = exer.get_levels()
+        # lev_link.reverse()
+        size = len(lev_link)
+        for i in range(anlv,size):
+            link = lev_link[i]
             exer.open_windows(link)
             time.sleep(7)
             exer.switch_windows()
-
-            egg_clock = 0
-            egg_flage = 0
-            while(True):
-                egg_clock += 1
-                try:
-                    subject = exer.get_suject()
-                    net_ans = exer.get_answer()
-                    if question_dict.has_key(subject):
-                        local_ans = question_dict[subject]
-                        for i in range(len(net_ans)):
-                            if net_ans[i].text in local_ans:
-                                net_ans[i].click()
-                                time.sleep(1)
-                    else:
-                        wor = exer.default_option()
-                        wor_str = ';'.join([str for str in wor])
-                        line = '%s#%s\n'%(subject.encode('utf-8'),wor_str)
-                        of.write(line)
-                        time.sleep(1)
-                    exer.next_answer()
-                except:
-                    print('traceback.format_exc():\n%s'%(traceback.format_exc()))
-                time.sleep(exer.get_rand(6,12))
-                total = exer.get_progress()[1]
-                if (total == 0):
-                    exer.next_level()
-                    egg_clock = 0
-                    egg_flage = 0
-                    time.sleep(7)
-                if (egg_clock>=15 and egg_flage==0):
-                    if (exer.easter_egg()):
-                        continue
-                    else:
-                        egg_clock = 0
-                        egg_flage = 1
-            exer.close()
+            working(of,i)
+            exer.close_windows()
             exer.switch_windows()            
     except :
-        print('traceback.format_exc():\n%s'%(traceback.format_exc()))
-    exer.quit()
+        GetLog().info('traceback.format_exc():\n%s'%(traceback.format_exc()))
+    exer.quit_chrome()
     of.close()
 
+def log_in(config):
+    global exer
+    exer = ExerciseSystem()
+    exer.open_link(lb_log_in)
+    while(True):
+        adm = adm_input.get()
+        pwd = pwd_input.get()
+        if (adm=='' or pwd==''):
+            mb.showwarning(title='输入提示框',message='账号或密码输入错误,请重新输入！')
+            # raise Exception('账号或密码输入错误')
+            continue
+        exer.enter_adm_pwd(adm,pwd)
+        vervode=dl.askstring('验证码提示框','请输入验证码')
+        exer.input_pin(vervode)
+        exer.log_in()
+        time.sleep(5)
+        if (exer.goto_computer()==False):
+            time.sleep(5)
+            break
+    config.set_username(adm)
+    config.set_password(pwd)
+    config.Save()
+
+def begin_answers(config):
+    set_mainwin_state(DISABLED)
+    log_in(config)
+    t = threading.Thread(target=auto_answer, args=(config,))
+    t.setDaemon(True) # 守护线程  
+    t.start()
+
+def set_mainwin_state(states):
+    login_btn.config(state=states)
+    adm_input.config(state=states)
+    pwd_input.config(state=states)
+
+def end_answers():
+    exer.set_state(True)
+    set_mainwin_state(NORMAL)
+
+def enter(handles):
+    if (handles[1]['state']==NORMAL and handles[2]['state']==NORMAL):
+        exer.set_times([int(handles[1].get()),int(handles[2].get())])
+    elif (handles[3]['state']==NORMAL):
+        global anlv
+        anlv = abs(int(handles[3].get())-1)
+        if (anlv>10):
+            anlv = 9
+    handles[0].destroy() 
+
+def option_windows():
+    opt_win = Toplevel(tk)
+    opt_win.title('选项')
+    opt_win.geometry(screen_center(opt_win,200,200))
+    opt_win.resizable(width=False, height=False)
+
+    # enter_state = NORMAL
+    if login_btn['state'] == DISABLED:
+        enter_state = NORMAL
+    else:
+        enter_state = DISABLED
+
+    lb_gap = Label(opt_win,text='答题间隔')
+    lb_gap.place(x=35, y=10)
+
+    btn_low = Entry(opt_win,state=enter_state)
+    btn_low.place(x=35, y=40, width=50, height=25)
+
+    lb_line = Label(opt_win,text='——')
+    lb_line.place(x=90, y=40, width=20, height=20)
+
+    btn_hight = Entry(opt_win,state=enter_state)
+    btn_hight.place(x=115, y=40, width=50, height=25)
+
+    lb_level = Label(opt_win,text='答题关卡')
+    lb_level.place(x=35, y=80)
+
+    btn_level = Entry(opt_win)
+    btn_level.place(x=35, y=110, width=50, height=25)
+    
+    handles=[opt_win,btn_low,btn_hight,btn_level]
+    btn_enter=Button(opt_win,text='确定',command=lambda: enter(handles)) # 不使用lambda会自动执行回调函数
+    btn_enter.place(x=75, y=150, width=50, height=25)
+    tk.mainloop()
+
+def screen_center(handles,width,height):
+    screenwidth = tk.winfo_screenwidth()
+    screenheight = tk.winfo_screenheight()
+    alignstr = '%dx%d+%d+%d' % (width, height, (screenwidth-width)/2, (screenheight-height)/2)
+    return alignstr
+
 if '__main__'==__name__:
-    # 'xxzgltb0256'
+    # chcp 65001 UTF-8
+    # chcp 936   GB2312
     load_answer()
     cfg = ConfigManger()
     tk = Tk()
     tk.title('自动答题系统')
-    tk.geometry('240x200')
+    tk.geometry(screen_center(tk,240,200))
     tk.resizable(width=False, height=False)
 
     # label如果设置大小，对齐方式将失效
@@ -281,11 +387,20 @@ if '__main__'==__name__:
     pwd_input = Entry(tk, show='*')
     pwd_input.place(x=70, y=110, width=100, height=25)
 
+    login_btn = Button(tk, text='登录', command=lambda: begin_answers(cfg))
+    login_btn.place(x=70, y=160, width=40, height=25)
+
+    logout_btn = Button(tk, text='登出', command=end_answers)
+    logout_btn.place(x=130, y=160, width=40, height=25)
+
+    main_menu = Menu(tk)
+    menu_set = Menu(main_menu,tearoff=0)  # 设置分组, tearoff=0 去掉虚线
+    main_menu.add_cascade(label='设置',menu=menu_set)
+    menu_set.add_command(label='选项',command=option_windows)
+    tk.config(menu=main_menu)
+    
     if (cfg.get_username()!='' and cfg.get_password()!=''):
         adm_input.insert (0,cfg.get_username())
         pwd_input.insert (0,cfg.get_password())
-
-    login_btn = Button(tk, text='登录', command=lambda: auto_answer(cfg))
-    login_btn.place(x=70, y=160, width=100, height=25)
 
     tk.mainloop()
