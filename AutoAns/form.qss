@@ -1,0 +1,49 @@
+QWidget {
+    background-color: #ffffff;
+}
+
+QWidget:focus {
+    outline: none;
+}
+
+QPushButton {
+    border-style: solid;
+    border-width: 1px;
+    border-color: #23a8f2;
+    border-radius: 2px;
+    color: #23a8f2;
+}
+
+QPushButton:pressed {
+    border-style: solid;
+    border-width: 1px;
+    border-color: #ffffff;
+    border-radius: 2px;
+    background-color: #23a8f2;
+    color: #ffffff;
+}
+
+QLineEdit {
+    border-style: solid;
+    border-width: 1px;
+    border-color: #e6e6e6;
+    border-radius: 2px;
+}
+
+QLineEdit:focus {
+    border-style: solid;
+    border-width: 1px;
+    border-color: #48dcfb;
+    border-radius: 2px;
+}
+
+QLabel#Line {
+    background-color: #cccccc;
+}
+
+QTextBrowser {
+    border-style: solid;
+    border-width: 1px;
+    border-color: #e6e6e6;
+    border-radius: 2px;
+}

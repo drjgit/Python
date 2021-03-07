@@ -1,0 +1,1 @@
+pyinstaller -D -w --add-data="form.ui;." --add-data="form.qss;." --add-data="config.cfg;." --add-data="answers.txt;." AutoAns.py
